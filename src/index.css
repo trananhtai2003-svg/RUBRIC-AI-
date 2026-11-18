@@ -1,0 +1,21 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@media print {
+  aside,
+  header button,
+  header select,
+  header input,
+  .no-print,
+  #workflowBar,
+  button {
+    display: none !important;
+  }
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  .print-page-break {
+    page-break-before: always;
+  }
+}
