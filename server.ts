@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 import { generateRubricForLesson, generateConcreteTaskForLesson } from './src/utils/curriculumGenerator';
@@ -16,6 +17,46 @@ const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json({ limit: '10mb' }));
+
+// Server-side data directory for persistence across devices
+const DATA_DIR = path.resolve(__dirname, 'data');
+const ROSTER_FILE = path.join(DATA_DIR, 'roster.json');
+if (!fs.existsSync(DATA_DIR)) {
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  } catch (e) {
+    console.warn('Cannot create data directory:', e);
+  }
+}
+
+// 0. API: Get & Save Student Roster (Cloud persistence)
+app.get('/api/roster', (_req: Request, res: Response) => {
+  try {
+    if (fs.existsSync(ROSTER_FILE)) {
+      const raw = fs.readFileSync(ROSTER_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return res.json({ success: true, students: parsed });
+      }
+    }
+  } catch (err: any) {
+    console.warn('Cannot read server roster file:', err?.message || err);
+  }
+  return res.json({ success: false, students: null });
+});
+
+app.post('/api/roster', (req: Request, res: Response) => {
+  try {
+    const { students } = req.body;
+    if (Array.isArray(students)) {
+      fs.writeFileSync(ROSTER_FILE, JSON.stringify(students, null, 2), 'utf-8');
+      return res.json({ success: true, count: students.length });
+    }
+  } catch (err: any) {
+    console.error('Cannot save server roster file:', err?.message || err);
+  }
+  return res.status(400).json({ success: false, error: 'Dữ liệu học sinh không hợp lệ' });
+});
 
 // Initialize Gemini client if valid API key is present
 const apiKey = process.env.GEMINI_API_KEY;
