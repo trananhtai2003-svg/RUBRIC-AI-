@@ -70,9 +70,10 @@ export default function App() {
   const [selectedStudentCode, setSelectedStudentCode] = useState<string>('61001');
 
   // Core Data Stores with localStorage persistence
-  const [students, setStudents] = useState<Student[]>(() =>
-    safeLoad(STORAGE_KEYS.ROSTER, DEMO_ROSTER)
-  );
+  const [students, setStudents] = useState<Student[]>(() => {
+    const loaded = safeLoad<Student[]>(STORAGE_KEYS.ROSTER, DEMO_ROSTER);
+    return Array.isArray(loaded) && loaded.length > 0 ? loaded : DEMO_ROSTER;
+  });
 
   const [lessons, setLessons] = useState<CurriculumLesson[]>(() => {
     let loaded = safeLoad<CurriculumLesson[]>(STORAGE_KEYS.LESSONS, INITIAL_LESSONS);
@@ -187,9 +188,29 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [toastMessage]);
 
-  // Persist whenever state changes
+  // Synchronize roster with server if available (cross-device cloud persistence)
+  useEffect(() => {
+    fetch('/api/roster')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.success && Array.isArray(data.students) && data.students.length > 0) {
+          setStudents(data.students);
+          safeSave(STORAGE_KEYS.ROSTER, data.students);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Persist whenever state changes (both local and server)
   useEffect(() => {
     safeSave(STORAGE_KEYS.ROSTER, students);
+    if (students.length > 0) {
+      fetch('/api/roster', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ students }),
+      }).catch(() => {});
+    }
   }, [students]);
 
   useEffect(() => {
@@ -517,7 +538,14 @@ export default function App() {
   };
 
   const handleImportStudents = (newStudents: Student[]) => {
-    setStudents(newStudents);
+    setStudents((prev) => {
+      if (prev.length === 0) return newStudents;
+      // Merge by student code so importing a new class doesn't delete existing classes
+      const map = new Map<string, Student>();
+      prev.forEach((s) => map.set(s.code, s));
+      newStudents.forEach((s) => map.set(s.code, s));
+      return Array.from(map.values());
+    });
     if (newStudents.length > 0) {
       setSelectedStudentCode(newStudents[0].code);
       setClassFilter(newStudents[0].cls || 'Tất cả');
