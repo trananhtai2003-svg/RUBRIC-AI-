@@ -83,7 +83,9 @@ export const RosterView: React.FC<RosterViewProps> = ({
 
     try {
       const text = await file.text();
-      const parsed = parseCSV(text);
+      const currentCls = filterClass !== 'Tất cả' ? filterClass : '6.1';
+      const currentG = filterGrade !== 0 ? filterGrade : 6;
+      const parsed = parseCSV(text, currentCls, currentG);
       if (!parsed.length) {
         throw new Error('Không tìm thấy bản ghi học sinh hợp lệ trong tệp CSV.');
       }
@@ -93,6 +95,8 @@ export const RosterView: React.FC<RosterViewProps> = ({
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       onShowToast(`Lỗi nạp CSV: ${msg}`);
+    } finally {
+      e.target.value = '';
     }
   };
 
@@ -569,8 +573,50 @@ export const RosterView: React.FC<RosterViewProps> = ({
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="text-center py-10 text-slate-400 italic">
-                    Không tìm thấy học sinh nào phù hợp với bộ lọc hiện tại.
+                  <td colSpan={8} className="p-8 text-center bg-slate-50/50 dark:bg-slate-900/50">
+                    {students.length === 0 ? (
+                      <div className="max-w-md mx-auto space-y-3">
+                        <AlertTriangle className="w-10 h-10 text-amber-500 mx-auto" />
+                        <div>
+                          <p className="font-bold text-sm text-slate-800 dark:text-slate-100">
+                            Danh sách học sinh đang trống (0 học sinh)
+                          </p>
+                          <p className="text-xs text-slate-500 mt-1">
+                            Dữ liệu học sinh chưa được nạp hoặc vừa bị xóa. Thầy có thể bấm khôi phục ngay danh sách mẫu 117 học sinh (Lớp 6.1 – 6.3) hoặc nạp tệp CSV của lớp.
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap justify-center gap-2 pt-1">
+                          <button
+                            onClick={handlePromptRestoreDemo}
+                            className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" /> Khôi phục DS mẫu 117 học sinh
+                          </button>
+                          <button
+                            onClick={handleDownloadTemplate}
+                            className="px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Download className="w-3.5 h-3.5" /> Tải mẫu CSV
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="text-slate-500 text-xs italic">
+                          Không tìm thấy học sinh nào phù hợp với bộ lọc hiện tại (Khối: {filterGrade || 'Tất cả'}, Lớp: {filterClass}).
+                        </p>
+                        <button
+                          onClick={() => {
+                            setFilterGrade(0);
+                            setFilterClass('Tất cả');
+                            setSearchQuery('');
+                          }}
+                          className="px-3 py-1 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 text-blue-700 dark:text-blue-300 rounded-md text-xs font-semibold cursor-pointer"
+                        >
+                          Hiển thị toàn bộ {students.length} học sinh
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               )}
