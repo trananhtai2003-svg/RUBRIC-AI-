@@ -369,52 +369,100 @@ export const WordTaskView: React.FC<WordTaskViewProps> = ({
           <div className="bg-slate-100 dark:bg-slate-800/80 px-4 py-2.5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
             <h4 className="font-bold text-slate-900 dark:text-slate-100 text-xs sm:text-sm flex items-center gap-1.5">
               <FileText className="w-3.5 h-3.5 text-blue-600" />
-              Xem trước đề theo định dạng trang in Microsoft Word
+              Xem truoc de theo dinh dang trang in Microsoft Word
             </h4>
-            <span className="text-[11px] text-slate-500">Khổ A4 · Cập nhật trực tiếp</span>
+            <span className="text-[11px] text-slate-500">Kho A4 · Cap nhat truc tiep</span>
           </div>
-
           <div className="p-4 bg-slate-100/70 dark:bg-slate-950 flex-1 overflow-y-auto max-h-[700px]">
-            {/* Word Document Mock Sheet */}
-            <div className="bg-white text-slate-900 shadow-md border border-slate-300 rounded p-6 sm:p-8 font-serif text-[12px] leading-relaxed max-w-2xl mx-auto space-y-3">
-              {/* Header Box */}
-              <div className="flex justify-between items-start border-b pb-2 mb-3 text-[11px] font-sans">
-                <div>
-                  <div className="font-bold uppercase tracking-wider">TRƯỜNG THCS & THPT NGUYỄN TẤT THÀNH</div>
-                  <div>TỔ BỘ MÔN TIN HỌC – KHỐI {taskGrade}</div>
+            <div className="bg-white text-slate-900 shadow-md border border-slate-300 rounded p-6 sm:p-8 font-serif text-[12px] leading-relaxed max-w-2xl mx-auto">
+              {/* Header 2 cot */}
+              <div className="flex justify-between items-start border-b-2 border-slate-800 pb-3 mb-3 text-[10.5px] font-sans">
+                <div className="text-center w-1/2">
+                  <div className="uppercase text-[10px]">BO QUOC PHONG</div>
+                  <div className="font-bold uppercase text-[10px]">TO BO MON TIN HOC</div>
+                  <div className="font-bold uppercase text-[11px] leading-tight">TRUONG THIEU SINH QUAN MIEN NAM</div>
+                  <div className="border-b-2 border-slate-700 w-3/5 mx-auto mt-1"></div>
                 </div>
-                <div className="text-right">
-                  <div className="font-bold">ĐỀ THỰC HÀNH CHÍNH THỨC</div>
-                  <div>Thời gian: 45 phút</div>
+                <div className="text-center w-1/2">
+                  <div className="font-bold text-[11px]">DE THUC HANH CHINH THUC</div>
+                  <div className="text-[10.5px]">Mon: Tin hoc - Khoi {taskGrade}</div>
+                  <div className="text-[10.5px]">Thoi gian: 45 phut</div>
+                  <div className="text-[10.5px]">Nam hoc: 2026 - 2027</div>
                 </div>
               </div>
-
-              {/* Document Title */}
-              <div className="text-center py-2 font-sans">
-                <h2 className="text-base font-extrabold uppercase text-blue-950">
-                  {taskCode}: {taskTitle}
-                </h2>
-                <p className="text-[11px] italic text-slate-600 mt-0.5">
-                  (Đề kiểm tra thực hành bám sát tiêu chí Rubric đánh giá năng lực)
-                </p>
+              {/* Title */}
+              <div className="text-center py-2 font-sans mb-2">
+                <div className="text-[13px] font-extrabold uppercase tracking-wide text-slate-900">BÀI KIỂM TRA THỰC HÀNH TIN HỌC</div>
+                <div className="text-[11px] italic text-slate-700 mt-1">{taskCode} - {taskTitle}</div>
               </div>
-
-              {/* Student info blank */}
-              <div className="bg-slate-50 p-2 border border-slate-200 rounded text-[11px] font-sans flex justify-between">
-                <span>Họ và tên: ................................................................</span>
-                <span>Lớp: .................</span>
-                <span>Mã số: .................</span>
+              {/* Student info */}
+              <div className="font-sans text-[10.5px] mb-2 space-y-1">
+                <div className="flex gap-4">
+                  <span className="flex-1"><b>Họ và tên:</b> ......................................................</span>
+                  <span><b>Lớp:</b> .................</span>
+                  <span><b>Máy số:</b> .................</span>
+                </div>
+                <div className="flex gap-4">
+                  <span><b>Mã học sinh:</b> ......................................................</span>
+                  <span><b>Ngày thi:</b> ......./......./............</span>
+                </div>
               </div>
-
-              {/* Rendered content */}
-              <div className="whitespace-pre-line text-[11.5px] leading-relaxed font-sans text-slate-800 pt-2 border-t border-slate-100">
-                {taskContent || 'Chưa có nội dung đề bài.'}
+              {/* YCCD */}
+              {currentLessonObj?.objective && (
+                <div className="border border-amber-400 bg-amber-50 rounded p-2 mb-3 font-sans text-[10.5px]">
+                  <div className="font-bold text-amber-800 mb-1">YEU CAU CAN DAT (YCCD):</div>
+                  <div className="text-amber-900 whitespace-pre-line leading-snug">{currentLessonObj.objective}</div>
+                </div>
+              )}
+              {/* Practice */}
+              <div className="border-b border-slate-500 font-bold font-sans text-[11px] mt-3 mb-2 pb-1 uppercase">Phan thuc hanh tren may tinh (10 diem)</div>
+              <div className="whitespace-pre-line text-[10.5px] leading-relaxed font-sans text-slate-800">
+                {taskContent || 'Chua co noi dung de bai.'}
               </div>
-
-              {/* Footer info */}
-              <div className="border-t pt-3 mt-4 text-[10px] text-slate-500 flex justify-between font-sans">
-                <span>Trang 1/1 – Đề thi thực hành Tin học CT GDPT 2018</span>
-                <span>Học sinh lưu tệp đúng quy ước mã số để hệ thống Rubric AI chấm tự động</span>
+              {/* Rubric */}
+              {criteria.length > 0 && (
+                <>
+                  <div className="border-b border-slate-500 font-bold font-sans text-[11px] mt-4 mb-2 pb-1 uppercase">Bang Rubric doi chieu - Hoc sinh tu danh gia</div>
+                  <table className="w-full border-collapse text-[9.5px] font-sans">
+                    <thead>
+                      <tr>
+                        <th className="border border-slate-400 p-1 bg-blue-100 text-center w-6">STT</th>
+                        <th className="border border-slate-400 p-1 bg-blue-100">Tieu chi</th>
+                        <th className="border border-slate-400 p-1 bg-blue-100 text-center w-10">Trong so</th>
+                        <th className="border border-slate-400 p-1 text-center" style={{background:'#FFF9C4'}}>Muc 1</th>
+                        <th className="border border-slate-400 p-1 text-center" style={{background:'#C8E6C9'}}>Muc 2</th>
+                        <th className="border border-slate-400 p-1 text-center" style={{background:'#81C784'}}>Muc 3</th>
+                        <th className="border border-slate-400 p-1 text-center text-white" style={{background:'#388E3C'}}>Muc 4</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {criteria.map((x, i) => (
+                        <tr key={i}>
+                          <td className="border border-slate-400 p-1 text-center">{i + 1}</td>
+                          <td className="border border-slate-400 p-1 font-bold">{String(x[0])}</td>
+                          <td className="border border-slate-400 p-1 text-center">{String(x[1])}%</td>
+                          {(Array.isArray(x[2]) ? x[2] : ['','','','']).map((lv: unknown, li: number) => (
+                            <td key={li} className="border border-slate-400 p-1" style={{background: ['#FFF9C4','#C8E6C9','#81C784','#388E3C'][li], color: li === 3 ? '#fff' : '#111'}}>{String(lv)}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              )}
+              {/* Signature */}
+              <div className="flex justify-between mt-6 font-sans text-[10.5px] text-center">
+                <div className="w-1/2">
+                  <div className="font-bold">HỌC SINH</div>
+                  <div className="italic">(Ky va ghi ro ho ten)</div>
+                  <div className="mt-10">......................................</div>
+                </div>
+                <div className="w-1/2">
+                  <div className="italic">Ngay ...... thang ...... nam {new Date().getFullYear()}</div>
+                  <div className="font-bold">GIAO VIEN RA DE / CHAM DIEM</div>
+                  <div className="italic">(Ky va ghi ro ho ten)</div>
+                  <div className="mt-6">......................................</div>
+                </div>
               </div>
             </div>
           </div>
