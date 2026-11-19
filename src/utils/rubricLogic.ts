@@ -76,8 +76,8 @@ export function rank(score: number | null | undefined): {
   };
 }
 
-export function parseCSV(text: string): Student[] {
-  const rows: string[][] = [];
+export function parseCSV(text: string, defaultClass = '6.1', defaultGrade = 6): Student[] {
+  const rawRows: string[][] = [];
   let row: string[] = [];
   let field = '';
   let quoted = false;
@@ -98,7 +98,7 @@ export function parseCSV(text: string): Student[] {
     } else if ((c === '\n' || c === '\r') && !quoted) {
       if (c === '\r' && next === '\n') i++;
       row.push(field.trim());
-      if (row.some((x) => x !== '')) rows.push(row);
+      if (row.some((x) => x !== '')) rawRows.push(row);
       row = [];
       field = '';
     } else {
@@ -106,45 +106,141 @@ export function parseCSV(text: string): Student[] {
     }
   }
   row.push(field.trim());
-  if (row.some((x) => x !== '')) rows.push(row);
+  if (row.some((x) => x !== '')) rawRows.push(row);
 
-  if (rows.length < 2) return [];
+  if (rawRows.length < 2) return [];
 
-  const headers = rows.shift()!.map((h) => normText(h));
-  const find = (names: string[]) => headers.findIndex((h) => names.includes(h));
+  // Header keyword synonym dictionaries
+  const codeSynonyms = ['mahs', 'mahocsinh', 'madinhdanh', 'madinhdanhhocsinh', 'masohocsinh', 'maso', 'sbd', 'sobaodanh', 'id', 'code', 'studentid', 'stt'];
+  const nameSynonyms = ['hoten', 'hovaten', 'hotenhocsinh', 'hovatengocsinh', 'hovatenhocsinh', 'tenhocsinh', 'fullname', 'name'];
+  const lastNameSynonyms = ['hodem', 'hovachudem', 'holot', 'hovaendem', 'ho'];
+  const firstNameSynonyms = ['ten', 'tenhocsinh', 'firstname'];
+  const gradeSynonyms = ['khoi', 'khoilop', 'grade', 'caplop', 'khoihoc'];
+  const clsSynonyms = ['lop', 'tenlop', 'lophoc', 'malop', 'class', 'classroom'];
 
-  const ix = {
-    code: find(['mahs', 'mahocsinh', 'studentid', 'code', 'sobaodanh', 'id']),
-    name: find(['hoten', 'tenhocsinh', 'fullname', 'name', 'hovaten']),
-    grade: find(['khoi', 'khoilop', 'grade', 'caplop']),
-    cls: find(['lop', 'malop', 'class', 'classroom']),
-  };
+  // 1. Locate header row (skip top metadata rows like "TRUONG...", "SO GD...", "DANH SACH...")
+  let headerRowIndex = -1;
+  let codeIdx = -1;
+  let nameIdx = -1;
+  let lastNameIdx = -1;
+  let firstNameIdx = -1;
+  let gradeIdx = -1;
+  let clsIdx = -1;
 
-  if (ix.name < 0 || ix.cls < 0) {
-    throw new Error('Không nhận diện được cột Họ tên và Lớp trong tệp CSV.');
+  for (let r = 0; r < Math.min(rawRows.length, 15); r++) {
+    const normH = rawRows[r].map((h) => normText(h));
+    const find = (names: string[]) => normH.findIndex((h) => names.includes(h) || names.some((n) => h.includes(n)));
+
+    const nI = find(nameSynonyms);
+    const lnI = find(lastNameSynonyms);
+    const fnI = find(firstNameSynonyms);
+    const cI = find(clsSynonyms);
+    const cdI = find(codeSynonyms);
+
+    if (nI >= 0 || (lnI >= 0 && fnI >= 0) || (cI >= 0 && cdI >= 0)) {
+      headerRowIndex = r;
+      nameIdx = nI;
+      lastNameIdx = lnI;
+      firstNameIdx = fnI;
+      clsIdx = cI;
+      codeIdx = cdI;
+      gradeIdx = find(gradeSynonyms);
+      break;
+    }
   }
 
-  return rows
-    .map((r, i) => {
-      const cls = (r[ix.cls] || '').trim();
-      const gradeRaw = ix.grade >= 0 ? r[ix.grade] : '';
-      const gm = String(gradeRaw || '').match(/\d+/);
-      const cm = cls.match(/\d+/);
-      const grade = gm ? Number(gm[0]) : cm ? Number(cm[0]) : 6;
-      const code = (ix.code >= 0 ? r[ix.code] : '').trim() || `HS${String(i + 1).padStart(4, '0')}`;
-      const name = (r[ix.name] || '').trim();
+  // Fallback: If no header found by keywords, assume row 0 is header
+  if (headerRowIndex < 0) {
+    headerRowIndex = 0;
+    const normH = rawRows[0].map((h) => normText(h));
+    const find = (names: string[]) => normH.findIndex((h) => names.includes(h));
+    nameIdx = find(nameSynonyms);
+    lastNameIdx = find(lastNameSynonyms);
+    firstNameIdx = find(firstNameSynonyms);
+    clsIdx = find(clsSynonyms);
+    codeIdx = find(codeSynonyms);
+    gradeIdx = find(gradeSynonyms);
+  }
 
-      return {
-        code,
-        name,
-        grade,
-        cls,
-        levels: null,
-        file: '',
-        demo: false,
-      };
-    })
-    .filter((s) => s.name && s.cls);
+  // Detect fallback class from earlier title rows (e.g. "Danh sách học sinh lớp 6.1")
+  let detectedFallbackClass = defaultClass || '6.1';
+  let detectedFallbackGrade = defaultGrade || 6;
+  for (let r = 0; r < headerRowIndex; r++) {
+    const textRow = rawRows[r].join(' ');
+    const classMatch = textRow.match(/l[ớo]p\s*([0-9]+[A-Za-z0-9_.-]*)/i);
+    if (classMatch) {
+      detectedFallbackClass = classMatch[1].trim();
+      const numMatch = detectedFallbackClass.match(/\d+/);
+      if (numMatch) detectedFallbackGrade = Number(numMatch[0]);
+    }
+  }
+
+  const dataRows = rawRows.slice(headerRowIndex + 1);
+  const result: Student[] = [];
+
+  for (let i = 0; i < dataRows.length; i++) {
+    const r = dataRows[i];
+    if (!r || r.length === 0 || r.every((x) => !x || !x.trim())) continue;
+
+    // Determine Name
+    let name = '';
+    if (nameIdx >= 0 && r[nameIdx]) {
+      name = r[nameIdx].trim();
+    } else if (lastNameIdx >= 0 && firstNameIdx >= 0) {
+      const ln = (r[lastNameIdx] || '').trim();
+      const fn = (r[firstNameIdx] || '').trim();
+      name = `${ln} ${fn}`.trim();
+    } else if (firstNameIdx >= 0 && r[firstNameIdx]) {
+      name = r[firstNameIdx].trim();
+    }
+
+    // Skip empty name or non-student rows (like totals, notes, dates)
+    if (!name || name.length < 2 || /^(tổng|cộng|ngày|tháng|năm|giáo viên|hiệu trưởng)/i.test(name)) {
+      continue;
+    }
+
+    // Determine Class
+    let cls = (clsIdx >= 0 && r[clsIdx] ? r[clsIdx] : '').trim();
+    if (!cls) cls = detectedFallbackClass;
+
+    // Determine Grade
+    let grade = defaultGrade || 6;
+    const gradeRaw = gradeIdx >= 0 ? r[gradeIdx] : '';
+    const gm = String(gradeRaw || '').match(/\d+/);
+    const cm = cls.match(/\d+/);
+    if (gm) {
+      grade = Number(gm[0]);
+    } else if (cm) {
+      grade = Number(cm[0]);
+    } else {
+      grade = detectedFallbackGrade;
+    }
+
+    // Determine Code
+    let code = (codeIdx >= 0 && r[codeIdx] ? r[codeIdx] : '').trim();
+    // If code is pure STT (1, 2, 3...) or missing, generate standard school code
+    if (!code || /^\d{1,3}$/.test(code)) {
+      const numIdx = code ? Number(code) : (i + 1);
+      const cleanCls = cls.replace(/[^0-9]/g, '');
+      code = cleanCls.length >= 2 ? `${cleanCls}${String(numIdx).padStart(3, '0')}` : `${grade}1${String(numIdx).padStart(3, '0')}`;
+    }
+
+    result.push({
+      code,
+      name,
+      grade,
+      cls,
+      levels: null,
+      file: '',
+      demo: false,
+    });
+  }
+
+  if (result.length === 0) {
+    throw new Error('Không trích xuất được học sinh hợp lệ từ tệp CSV. Vui lòng kiểm tra lại cấu trúc bảng hoặc dùng mẫu chuẩn.');
+  }
+
+  return result;
 }
 
 export function matchSubmissionFilename(filename: string, studentCode: string): boolean {
@@ -336,6 +432,219 @@ export async function inspectSubmission(file: File): Promise<AnalysisResult> {
     evidence: ['Định dạng tệp cần giáo viên mở trực tiếp để đối chiếu Rubric.'],
     rawText: '',
   };
+}
+
+export function generateExamDocxBlob(
+  examContent: string,
+  criteria: Criterion[],
+  opts: {
+    schoolName?: string;
+    unitName?: string;
+    grade: number;
+    lessonCode: string;
+    lessonTitle: string;
+    objective?: string;
+    schoolYear?: string;
+    examLabel?: string;
+    timeMinutes?: number;
+  }
+): Blob {
+  const esc = (s: unknown) =>
+    String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+  const schoolName = opts.schoolName || 'TRƯỜNG THIẾU SINH QUÂN MIỀN NAM';
+  const unitName = opts.unitName || 'TỔ BỘ MÔN TIN HỌC';
+  const grade = opts.grade;
+  const lessonCode = opts.lessonCode;
+  const lessonTitle = opts.lessonTitle;
+  const objective = opts.objective || '';
+  const schoolYear = opts.schoolYear || '2026 – 2027';
+  const examLabel = opts.examLabel || 'ĐỀ THỰC HÀNH CHÍNH THỨC';
+  const timeMinutes = opts.timeMinutes || 45;
+
+  // Convert plain-text task content into formatted HTML
+  function contentToHtml(raw: string): string {
+    const lines = raw.split('\n');
+    let html = '';
+    let inOl = false;
+    let inUl = false;
+    const closeList = () => {
+      if (inOl) { html += '</ol>'; inOl = false; }
+      if (inUl) { html += '</ul>'; inUl = false; }
+    };
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) { closeList(); html += '<br>'; continue; }
+      // Numbered list: "1." "2." etc.
+      const numMatch = trimmed.match(/^(\d+)\.\s+(.+)/);
+      if (numMatch) {
+        if (inUl) { html += '</ul>'; inUl = false; }
+        if (!inOl) { html += '<ol style="margin:4px 0 4px 20px;padding:0;">'; inOl = true; }
+        html += `<li style="margin-bottom:4px;">${esc(numMatch[2])}</li>`;
+        continue;
+      }
+      // Bullet list: "- " or "• "
+      const bulletMatch = trimmed.match(/^[-•]\s+(.+)/);
+      if (bulletMatch) {
+        if (inOl) { html += '</ol>'; inOl = false; }
+        if (!inUl) { html += '<ul style="margin:4px 0 4px 20px;padding:0;">'; inUl = true; }
+        html += `<li style="margin-bottom:4px;">${esc(bulletMatch[1])}</li>`;
+        continue;
+      }
+      // ALL-CAPS heading (e.g. "PHẦN I: ...")
+      if (trimmed === trimmed.toUpperCase() && trimmed.length > 5 && /[A-ZÀÁÂÃÈÉÊÌÍÒÓÔÕÙÚĂĐ]/.test(trimmed)) {
+        closeList();
+        html += `<p style="font-weight:bold;margin:10px 0 4px 0;">${esc(trimmed)}</p>`;
+        continue;
+      }
+      closeList();
+      html += `<p style="margin:3px 0;">${esc(trimmed)}</p>`;
+    }
+    closeList();
+    return html;
+  }
+
+  // Build rubric table rows with color coding
+  const rubricColors = ['#FFF9C4', '#C8E6C9', '#81C784', '#388E3C'];
+  const rubricTextColors = ['#333', '#1B5E20', '#1B5E20', '#fff'];
+  const levelLabels = ['Mức 1\n(Chưa đạt)', 'Mức 2\n(Đạt một phần)', 'Mức 3\n(Đạt yêu cầu)', 'Mức 4\n(Vượt yêu cầu)'];
+
+  let rubricRows = '';
+  let totalWeight = 0;
+  criteria.forEach((x, i) => {
+    totalWeight += Number(x[1]) || 0;
+    const levels = Array.isArray(x[2]) ? x[2] : ['', '', '', ''];
+    const cells = levels.map((lv: unknown, li: number) =>
+      `<td style="border:1px solid #bbb;padding:5px 7px;vertical-align:top;background:${rubricColors[li]};color:${rubricTextColors[li]};font-size:10pt;">${esc(lv)}</td>`
+    ).join('');
+    rubricRows += `<tr>
+      <td style="border:1px solid #bbb;padding:5px 7px;text-align:center;font-size:10pt;">${i + 1}</td>
+      <td style="border:1px solid #bbb;padding:5px 7px;font-weight:bold;font-size:10pt;">${esc(x[0])}</td>
+      <td style="border:1px solid #bbb;padding:5px 7px;text-align:center;font-size:10pt;">${esc(x[1])}%</td>
+      ${cells}
+    </tr>`;
+  });
+
+  const objectiveHtml = objective
+    ? `<div style="border:1.5px solid #f59e0b;background:#fffbeb;padding:10px 14px;border-radius:6px;margin:14px 0;">
+        <div style="font-weight:bold;color:#92400e;font-size:11pt;margin-bottom:4px;">📌 YÊU CẦU CẦN ĐẠT (YCCĐ):</div>
+        <div style="font-size:11pt;color:#451a03;white-space:pre-wrap;">${esc(objective)}</div>
+       </div>`
+    : '';
+
+  const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Đề thực hành – Khối ${grade} – ${esc(lessonCode)}</title>
+  <style>
+    body { font-family: 'Times New Roman', serif; font-size: 12pt; line-height: 1.5; color: #111; margin: 24px 32px; }
+    table { border-collapse: collapse; width: 100%; }
+    .no-border td { border: none !important; }
+    .header-table td { border: none; padding: 2px 4px; vertical-align: top; }
+    .info-line { margin: 3px 0; }
+    .section-title { font-weight: bold; font-size: 12pt; border-bottom: 1px solid #555; padding-bottom: 3px; margin: 16px 0 8px 0; }
+    ol, ul { margin: 4px 0 4px 24px; }
+    li { margin-bottom: 3px; }
+  </style>
+</head>
+<body>
+
+<!-- ===== HEADER ===== -->
+<table class="header-table" style="margin-bottom:4px;">
+  <tr>
+    <td style="width:50%;text-align:center;">
+      <div style="font-size:10.5pt;text-transform:uppercase;">BỘ QUỐC PHÒNG</div>
+      <div style="font-weight:bold;font-size:10.5pt;text-transform:uppercase;">${esc(unitName)}</div>
+      <div style="font-weight:bold;font-size:11pt;text-transform:uppercase;">${esc(schoolName)}</div>
+      <div style="border-bottom:2px solid #000;width:60%;margin:3px auto 0;"></div>
+    </td>
+    <td style="width:50%;text-align:center;">
+      <div style="font-size:11pt;font-weight:bold;">${esc(examLabel)}</div>
+      <div style="font-size:10.5pt;">Môn: Tin học – Khối ${grade}</div>
+      <div style="font-size:10.5pt;">Thời gian: ${timeMinutes} phút</div>
+      <div style="font-size:10.5pt;">Năm học: ${esc(schoolYear)}</div>
+    </td>
+  </tr>
+</table>
+
+<!-- ===== TITLE ===== -->
+<div style="text-align:center;margin:12px 0 8px 0;">
+  <div style="font-weight:bold;font-size:15pt;text-transform:uppercase;letter-spacing:0.5px;">BÀI KIỂM TRA THỰC HÀNH TIN HỌC</div>
+  <div style="font-size:11.5pt;font-style:italic;margin-top:4px;">${esc(lessonCode)} – ${esc(lessonTitle)}</div>
+</div>
+
+<!-- ===== STUDENT INFO ===== -->
+<table class="no-border" style="margin:10px 0;width:100%;">
+  <tr>
+    <td style="border:none;width:50%;padding:3px 2px;font-size:11pt;"><b>Họ và tên:</b> ......................................................</td>
+    <td style="border:none;width:25%;padding:3px 2px;font-size:11pt;"><b>Lớp:</b> ..................</td>
+    <td style="border:none;width:25%;padding:3px 2px;font-size:11pt;"><b>Máy số:</b> ..................</td>
+  </tr>
+  <tr>
+    <td style="border:none;padding:3px 2px;font-size:11pt;"><b>Mã học sinh:</b> ......................................................</td>
+    <td colspan="2" style="border:none;padding:3px 2px;font-size:11pt;"><b>Ngày thi:</b> ......./......./............</td>
+  </tr>
+</table>
+
+<!-- ===== YCCĐ ===== -->
+${objectiveHtml}
+
+<!-- ===== PRACTICE SECTION ===== -->
+<div class="section-title">PHẦN THỰC HÀNH TRÊN MÁY TÍNH (10 ĐIỂM)</div>
+<div style="font-size:12pt;margin-bottom:10px;">
+  ${contentToHtml(examContent)}
+</div>
+
+<!-- ===== RUBRIC TABLE ===== -->
+<div class="section-title" style="margin-top:20px;">BẢNG RUBRIC ĐỐI CHIẾU – HỌC SINH TỰ ĐÁNH GIÁ</div>
+<p style="font-size:10.5pt;font-style:italic;margin:0 0 6px 0;">Học sinh đọc bảng Rubric dưới đây để tự đối chiếu kết quả bài làm của mình.</p>
+<table style="border-collapse:collapse;width:100%;font-size:10.5pt;">
+  <thead>
+    <tr>
+      <th style="border:1px solid #bbb;padding:6px 8px;background:#dbeafe;text-align:center;width:36px;">STT</th>
+      <th style="border:1px solid #bbb;padding:6px 8px;background:#dbeafe;width:140px;">Tiêu chí đánh giá</th>
+      <th style="border:1px solid #bbb;padding:6px 8px;background:#dbeafe;text-align:center;width:60px;">Trọng số</th>
+      <th style="border:1px solid #bbb;padding:6px 8px;background:${rubricColors[0]};text-align:center;">Mức 1<br><span style="font-weight:normal;font-size:9.5pt;">(Chưa đạt)</span></th>
+      <th style="border:1px solid #bbb;padding:6px 8px;background:${rubricColors[1]};text-align:center;">Mức 2<br><span style="font-weight:normal;font-size:9.5pt;">(Đạt một phần)</span></th>
+      <th style="border:1px solid #bbb;padding:6px 8px;background:${rubricColors[2]};text-align:center;">Mức 3<br><span style="font-weight:normal;font-size:9.5pt;">(Đạt yêu cầu)</span></th>
+      <th style="border:1px solid #bbb;padding:6px 8px;background:${rubricColors[3]};color:${rubricTextColors[3]};text-align:center;">Mức 4<br><span style="font-weight:normal;font-size:9.5pt;">(Vượt yêu cầu)</span></th>
+    </tr>
+  </thead>
+  <tbody>
+    ${rubricRows}
+    <tr>
+      <td colspan="2" style="border:1px solid #bbb;padding:5px 8px;font-weight:bold;text-align:right;">Tổng trọng số:</td>
+      <td style="border:1px solid #bbb;padding:5px 8px;text-align:center;font-weight:bold;">${totalWeight}%</td>
+      <td colspan="4" style="border:1px solid #bbb;padding:5px 8px;text-align:center;font-style:italic;color:#555;">Điểm = Σ(Mức chọn / 4) × Trọng số × 10</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ===== SIGNATURE ROW ===== -->
+<table class="no-border" style="margin-top:30px;width:100%;">
+  <tr>
+    <td style="border:none;text-align:center;width:50%;">
+      <div style="font-weight:bold;">HỌC SINH</div>
+      <div style="font-style:italic;font-size:10.5pt;">(Ký và ghi rõ họ tên)</div>
+      <div style="margin-top:50px;">......................................</div>
+    </td>
+    <td style="border:none;text-align:center;width:50%;">
+      <div style="font-style:italic;font-size:10.5pt;">Ngày ...... tháng ...... năm ${new Date().getFullYear()}</div>
+      <div style="font-weight:bold;">GIÁO VIÊN RA ĐỀ / CHẤM ĐIỂM</div>
+      <div style="font-style:italic;font-size:10.5pt;">(Ký và ghi rõ họ tên)</div>
+      <div style="margin-top:36px;">......................................</div>
+    </td>
+  </tr>
+</table>
+
+</body>
+</html>`;
+
+  return new Blob(['\ufeff' + html], { type: 'application/msword;charset=utf-8;' });
 }
 
 export function generateDocxBlob(
