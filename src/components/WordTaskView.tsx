@@ -16,7 +16,7 @@ import {
   RefreshCw,
   RotateCcw,
 } from 'lucide-react';
-import { generateDocxBlob, downloadBlob } from '../utils/rubricLogic';
+import { generateExamDocxBlob, generateDocxBlob, downloadBlob } from '../utils/rubricLogic';
 import { generateConcreteTaskForLesson } from '../utils/curriculumGenerator';
 
 interface WordTaskViewProps {
@@ -148,10 +148,17 @@ export const WordTaskView: React.FC<WordTaskViewProps> = ({
       onShowToast('Chưa có nội dung đề bài để xuất.');
       return;
     }
-    const blob = generateDocxBlob(
-      `ĐỀ KIỂM TRA THỰC HÀNH TIN HỌC KHỐI ${taskGrade} – ${taskCode}`,
-      taskContent
-    );
+    const blob = generateExamDocxBlob(taskContent, criteria, {
+      grade: taskGrade,
+      lessonCode: taskCode,
+      lessonTitle: taskTitle,
+      objective: currentLessonObj?.objective || '',
+      schoolName: 'TRƯỜNG THIẾU SINH QUÂN MIỀN NAM',
+      unitName: 'TỔ BỘ MÔN TIN HỌC',
+      schoolYear: '2026 – 2027',
+      examLabel: 'ĐỀ THỰC HÀNH CHÍNH THỨC',
+      timeMinutes: 45,
+    });
     const fileName = `De_Thuc_Hanh_Khoi_${taskGrade}_${taskCode.replace(/\s+/g, '_')}.doc`;
     downloadBlob(blob, fileName);
     onShowToast(`Đã tải về tệp Word (.doc): ${fileName}`);
